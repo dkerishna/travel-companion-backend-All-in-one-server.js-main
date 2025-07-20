@@ -1,8 +1,6 @@
-import admin from 'firebase-admin';
-import dotenv from 'dotenv';
-import pkg from 'pg';
-
-const { Pool } = pkg;
+const admin = require('firebase-admin');
+const dotenv = require('dotenv');
+const { Pool } = require('pg');
 
 dotenv.config();
 
@@ -32,7 +30,7 @@ const pool = new Pool({
 });
 
 // Middleware to verify token and insert user if not exists
-export const verifyToken = async (req, res, next) => {
+const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -63,4 +61,4 @@ export const verifyToken = async (req, res, next) => {
     }
 };
 
-export default admin;
+module.exports = { admin, pool, verifyToken };
