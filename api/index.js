@@ -3,11 +3,21 @@ const cors = require("cors");
 const { Pool } = require("pg");
 require("dotenv").config();
 const admin = require("../firebaseAdmin");
+import { verifyToken } from './firebaseAdmin.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:5174",
+  "https://https://travel-companion-backend-seven.vercel.app/api"
+];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
+app.options("*", cors());
 app.use(express.json());
 
 
