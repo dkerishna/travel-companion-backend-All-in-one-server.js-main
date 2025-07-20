@@ -36,13 +36,16 @@ checkPostgresConnection();
 app.post("/trips", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { title, description, start_date, end_date, user_id, image_url } = req.body;
+    const { uid } = req.user;
+    const { title, country, city, start_date, end_date, notes, image_url } = req.body;
+
     const result = await client.query(
-      `INSERT INTO trips (title, description, start_date, end_date, user_id, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO trips (user_firebase_uid, title, country, city, start_date, end_date, notes, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [title, description, start_date, end_date, user_id, image_url]
+      [uid, title, country, city, start_date, end_date, notes, image_url]
     );
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Create trip error:", err.message);
@@ -56,11 +59,11 @@ app.post("/trips", verifyToken, async (req, res) => {
 app.get("/trips", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { user_id } = req.query;
-    const result = user_id
-      ? await client.query("SELECT * FROM trips WHERE user_id = $1 ORDER BY id DESC", [user_id])
-      : await client.query("SELECT * FROM trips ORDER BY id DESC");
-
+    const { uid } = req.user;
+    const result = await client.query(
+      "SELECT * FROM trips WHERE user_firebase_uid = $1 ORDER BY id DESC",
+      [uid]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch trips error:", err.message);
@@ -89,12 +92,14 @@ app.get("/trips/:id", verifyToken, async (req, res) => {
 app.put("/trips/:id", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { title, description, start_date, end_date, image_url } = req.body;
+    const { title, country, city, start_date, end_date, notes, image_url } = req.body;
+
     await client.query(
-      `UPDATE trips SET title = $1, description = $2, start_date = $3, end_date = $4, image_url = $5
-       WHERE id = $6`,
-      [title, description, start_date, end_date, image_url, req.params.id]
+      `UPDATE trips SET title = $1, country = $2, city = $3, start_date = $4, end_date = $5, notes = $6, image_url = $7
+       WHERE id = $8`,
+      [title, country, city, start_date, end_date, notes, image_url, req.params.id]
     );
+
     res.json({ message: "Trip updated successfully" });
   } catch (err) {
     console.error("Update trip error:", err.message);
@@ -126,7 +131,7 @@ app.get("/destinations", verifyToken, async (req, res) => {
   try {
     const { trip_id } = req.query;
     const result = await client.query(
-      "SELECT * FROM destinations WHERE trip_id = $1 ORDER BY id ASC",
+      "SELECT * FROM destinations WHERE trip_id = $1 ORDER BY order_index ASC",
       [trip_id]
     );
     res.json(result.rows);
@@ -142,13 +147,15 @@ app.get("/destinations", verifyToken, async (req, res) => {
 app.post("/destinations", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { trip_id, location_name, notes, image_url } = req.body;
+    const { trip_id, name, description, latitude, longitude, image_url, order_index } = req.body;
+
     const result = await client.query(
-      `INSERT INTO destinations (trip_id, location_name, notes, image_url)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO destinations (trip_id, name, description, latitude, longitude, image_url, order_index)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [trip_id, location_name, notes, image_url]
+      [trip_id, name, description, latitude, longitude, image_url, order_index]
     );
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Add destination error:", err.message);
@@ -162,13 +169,15 @@ app.post("/destinations", verifyToken, async (req, res) => {
 app.put("/destinations/:id", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { location_name, notes, image_url } = req.body;
+    const { name, description, latitude, longitude, image_url, order_index } = req.body;
+
     await client.query(
       `UPDATE destinations
-       SET location_name = $1, notes = $2, image_url = $3
-       WHERE id = $4`,
-      [location_name, notes, image_url, req.params.id]
+       SET name = $1, description = $2, latitude = $3, longitude = $4, image_url = $5, order_index = $6
+       WHERE id = $7`,
+      [name, description, latitude, longitude, image_url, order_index, req.params.id]
     );
+
     res.json({ message: "Destination updated successfully" });
   } catch (err) {
     console.error("Update destination error:", err.message);
