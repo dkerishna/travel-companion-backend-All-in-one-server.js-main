@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 4000;
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://https://travel-companion-backend-seven.vercel.app/api"
+  "https://travel-companion-backend-seven.vercel.app/api"
 ];
 
 app.use(cors({
