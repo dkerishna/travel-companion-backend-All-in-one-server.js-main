@@ -27,35 +27,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-// ✅ Middleware to verify Firebase token
-async function verifyToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid token" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken; // contains uid, email, etc.
-
-    // 🔄 Upsert user into 'users' table
-    const { uid, email, name = null } = decodedToken;
-    await pool.query(
-      `INSERT INTO users (firebase_uid, email, name)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (firebase_uid) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name`,
-      [uid, email, name]
-    );
-
-    next();
-  } catch (err) {
-    console.error("Token verification failed:", err);
-    res.status(401).json({ error: "Unauthorized" });
-  }
-}
 
 // ✅ Test route
 app.get("/", (req, res) => {
