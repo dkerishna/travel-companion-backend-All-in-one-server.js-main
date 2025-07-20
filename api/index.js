@@ -2,7 +2,7 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const { Pool } = require("pg");
-const verifyToken = require("../firebaseAdmin.js");
+const { verifyToken } = require("../firebaseAdmin.js");
 require("dotenv").config();
 
 const { DATABASE_URL } = process.env;
