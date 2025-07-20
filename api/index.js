@@ -30,6 +30,16 @@ async function verifyToken(req, res, next) {
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     req.user = decodedToken; // contains uid, email, etc.
+
+    // 🔄 Upsert user into 'users' table
+    const { uid, email, name = null } = decodedToken;
+    await pool.query(
+      `INSERT INTO users (firebase_uid, email, name)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (firebase_uid) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name`,
+      [uid, email, name]
+    );
+
     next();
   } catch (err) {
     console.error("Token verification failed:", err);
