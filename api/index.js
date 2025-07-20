@@ -3,7 +3,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 require("dotenv").config();
 const admin = require("../firebaseAdmin");
-const { verifyToken } = require('./firebaseAdmin');
+const { verifyToken } = require('../firebaseAdmin');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
