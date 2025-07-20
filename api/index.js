@@ -296,4 +296,14 @@ app.post("/api/users", verifyToken, async (req, res) => {
   }
 });
 
+app.get("/api/test-db", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT NOW()");
+    res.json({ status: "connected", time: result.rows[0].now });
+  } catch (err) {
+    console.error("DB Test Failed:", err);
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
 module.exports = app;
