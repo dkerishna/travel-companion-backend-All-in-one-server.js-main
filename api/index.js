@@ -1,289 +1,203 @@
 const express = require("express");
+const path = require("path");
 const cors = require("cors");
 const { Pool } = require("pg");
+const verifyToken = require("../firebaseAdmin.js");
 require("dotenv").config();
-const { verifyToken } = require('../firebaseAdmin');
+
+const { DATABASE_URL } = process.env;
 
 const app = express();
-const PORT = process.env.PORT || 4000;
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://travel-companion-backend-seven.vercel.app/api"
-];
-
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-}));
-app.options("*", cors());
+app.use(cors());
 app.use(express.json());
 
-
-// ✅ PostgreSQL connection
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  connectionString: DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-
-// ✅ Test route
-app.get("/", (req, res) => {
-  res.send("Travel Companion API is running.");
-});
-
-
-// ✅ Secure Routes — TRIPS
-
-// GET all trips for the logged-in user
-app.get("/api/trips", verifyToken, async (req, res) => {
-  const uid = req.user.uid;
-
+// Debug: Check Postgres version
+async function checkPostgresConnection() {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      "SELECT * FROM trips WHERE user_firebase_uid = $1 ORDER BY created_at DESC",
-      [uid]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Server error");
+    const res = await client.query("SELECT version()");
+    console.log("Connected to:", res.rows[0].version);
+  } finally {
+    client.release();
   }
-});
+}
+checkPostgresConnection();
 
-// POST a new trip (no uid from frontend!)
-app.post("/api/trips", verifyToken, async (req, res) => {
-  const uid = req.user.uid;
-  const { title, country, city, start_date, end_date, notes, image_url } = req.body;
+// === TRIPS ENDPOINTS ===
 
+// Create a new trip
+app.post("/trips", verifyToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      `INSERT INTO trips
-      (user_firebase_uid, title, country, city, start_date, end_date, notes, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *`,
-      [uid, title, country, city, start_date, end_date, notes, image_url]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Server error");
-  }
-});
-
-app.put("/api/trips/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const uid = req.user.uid;
-  const { title, country, city, start_date, end_date, notes, image_url } = req.body;
-
-  try {
-    // 🔒 SECURITY FIX: Verify ownership before updating
-    const result = await pool.query(
-      `UPDATE trips SET
-        title = $1,
-        country = $2,
-        city = $3,
-        start_date = $4,
-        end_date = $5,
-        notes = $6,
-        image_url = $7
-       WHERE id = $8 AND user_firebase_uid = $9
+    const { title, description, start_date, end_date, user_id, image_url } = req.body;
+    const result = await client.query(
+      `INSERT INTO trips (title, description, start_date, end_date, user_id, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [title, country, city, start_date, end_date, notes, image_url, id, uid]
+      [title, description, start_date, end_date, user_id, image_url]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Trip not found or unauthorized" });
-    }
-
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Error updating trip:", err);
-    res.status(500).send("Server error");
+    console.error("Create trip error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
-app.delete("/api/trips/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const uid = req.user.uid;
-
+// Get all trips (optionally by user_id)
+app.get("/trips", verifyToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    // 🔒 SECURITY FIX: Verify ownership before deleting
-    const result = await pool.query(
-      `DELETE FROM trips WHERE id = $1 AND user_firebase_uid = $2 RETURNING *`,
-      [id, uid]
+    const { user_id } = req.query;
+    const result = user_id
+      ? await client.query("SELECT * FROM trips WHERE user_id = $1 ORDER BY id DESC", [user_id])
+      : await client.query("SELECT * FROM trips ORDER BY id DESC");
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch trips error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Get one trip by ID
+app.get("/trips/:id", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const result = await client.query("SELECT * FROM trips WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Trip not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch trip error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Update a trip
+app.put("/trips/:id", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { title, description, start_date, end_date, image_url } = req.body;
+    await client.query(
+      `UPDATE trips SET title = $1, description = $2, start_date = $3, end_date = $4, image_url = $5
+       WHERE id = $6`,
+      [title, description, start_date, end_date, image_url, req.params.id]
     );
+    res.json({ message: "Trip updated successfully" });
+  } catch (err) {
+    console.error("Update trip error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Trip not found or unauthorized" });
-    }
-
+// Delete a trip
+app.delete("/trips/:id", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("DELETE FROM trips WHERE id = $1", [req.params.id]);
     res.json({ message: "Trip deleted successfully" });
   } catch (err) {
-    console.error("Error deleting trip:", err);
-    res.status(500).send("Server error");
+    console.error("Delete trip error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
+// === DESTINATIONS ===
 
-// ✅ Secure Routes — DESTINATIONS
-
-app.post("/api/destinations", verifyToken, async (req, res) => {
-  const uid = req.user.uid;
-  const { trip_id, name, description, latitude, longitude, image_url, order_index } = req.body;
-
+// Get destinations for a trip
+app.get("/destinations", verifyToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    // 🔒 SECURITY FIX: Verify the trip belongs to the user
-    const tripCheck = await pool.query(
-      "SELECT id FROM trips WHERE id = $1 AND user_firebase_uid = $2",
-      [trip_id, uid]
-    );
-
-    if (tripCheck.rows.length === 0) {
-      return res.status(403).json({ error: "Trip not found or unauthorized" });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO destinations 
-      (trip_id, name, description, latitude, longitude, image_url, order_index)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) 
-      RETURNING *`,
-      [trip_id, name, description, latitude, longitude, image_url, order_index]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("Error creating destination:", err);
-    res.status(500).send("Server error");
-  }
-});
-
-app.get("/api/destinations/:trip_id", verifyToken, async (req, res) => {
-  const { trip_id } = req.params;
-  const uid = req.user.uid;
-
-  try {
-    // 🔒 SECURITY FIX: Verify the trip belongs to the user before fetching destinations
-    const tripCheck = await pool.query(
-      "SELECT id FROM trips WHERE id = $1 AND user_firebase_uid = $2",
-      [trip_id, uid]
-    );
-
-    if (tripCheck.rows.length === 0) {
-      return res.status(403).json({ error: "Trip not found or unauthorized" });
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM destinations 
-       WHERE trip_id = $1 
-       ORDER BY order_index ASC, created_at ASC`,
+    const { trip_id } = req.query;
+    const result = await client.query(
+      "SELECT * FROM destinations WHERE trip_id = $1 ORDER BY id ASC",
       [trip_id]
     );
-
     res.json(result.rows);
   } catch (err) {
-    console.error("Error fetching destinations:", err);
-    res.status(500).send("Server error");
+    console.error("Fetch destinations error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
-app.put("/api/destinations/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const uid = req.user.uid;
-  const { name, description, latitude, longitude, image_url, order_index } = req.body;
-
+// Add destination to a trip
+app.post("/destinations", verifyToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    // 🔒 SECURITY FIX: Verify the destination belongs to a trip owned by the user
-    const ownershipCheck = await pool.query(
-      `SELECT d.id FROM destinations d
-       JOIN trips t ON d.trip_id = t.id
-       WHERE d.id = $1 AND t.user_firebase_uid = $2`,
-      [id, uid]
-    );
-
-    if (ownershipCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Destination not found or unauthorized" });
-    }
-
-    const result = await pool.query(
-      `UPDATE destinations
-       SET name = $1,
-           description = $2,
-           latitude = $3,
-           longitude = $4,
-           image_url = $5,
-           order_index = $6
-       WHERE id = $7
+    const { trip_id, location_name, notes, image_url } = req.body;
+    const result = await client.query(
+      `INSERT INTO destinations (trip_id, location_name, notes, image_url)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [name, description, latitude, longitude, image_url, order_index, id]
+      [trip_id, location_name, notes, image_url]
     );
-
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Error updating destination:", err);
-    res.status(500).send("Server error");
+    console.error("Add destination error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
-app.delete("/api/destinations/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const uid = req.user.uid;
-
+// Update a destination
+app.put("/destinations/:id", verifyToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    // 🔒 SECURITY FIX: Verify the destination belongs to a trip owned by the user
-    const ownershipCheck = await pool.query(
-      `SELECT d.id FROM destinations d
-       JOIN trips t ON d.trip_id = t.id
-       WHERE d.id = $1 AND t.user_firebase_uid = $2`,
-      [id, uid]
+    const { location_name, notes, image_url } = req.body;
+    await client.query(
+      `UPDATE destinations
+       SET location_name = $1, notes = $2, image_url = $3
+       WHERE id = $4`,
+      [location_name, notes, image_url, req.params.id]
     );
+    res.json({ message: "Destination updated successfully" });
+  } catch (err) {
+    console.error("Update destination error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
 
-    if (ownershipCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Destination not found or unauthorized" });
-    }
-
-    const result = await pool.query(
-      `DELETE FROM destinations WHERE id = $1 RETURNING *`,
-      [id]
-    );
-
+// Delete a destination
+app.delete("/destinations/:id", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("DELETE FROM destinations WHERE id = $1", [req.params.id]);
     res.json({ message: "Destination deleted successfully" });
   } catch (err) {
-    console.error("Error deleting destination:", err);
-    res.status(500).send("Server error");
+    console.error("Delete destination error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
-app.post("/api/users", verifyToken, async (req, res) => {
-  const { uid, email, name } = req.user;
-
-  try {
-    // Insert or update user
-    const result = await pool.query(
-      `INSERT INTO users (firebase_uid, email, name) 
-       VALUES ($1, $2, $3) 
-       ON CONFLICT (firebase_uid) DO UPDATE SET 
-       email = EXCLUDED.email, 
-       name = EXCLUDED.name
-       RETURNING *`,
-      [uid, email, name]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Error creating/updating user:", err);
-    res.status(500).send("Server error");
-  }
+// Home route
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname + "/index.html"));
 });
 
-app.get("/api/test-db", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT NOW()");
-    res.json({ status: "connected", time: result.rows[0].now });
-  } catch (err) {
-    console.error("DB Test Failed:", err);
-    res.status(500).json({ status: "error", message: err.message });
-  }
+// Start server
+app.listen(3000, () => {
+  console.log("Travel Companion API running on port 3000");
 });
-
-module.exports = app;
