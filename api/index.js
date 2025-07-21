@@ -143,22 +143,30 @@ app.get("/destinations", verifyToken, async (req, res) => {
   }
 });
 
-// Add destination to a trip
-app.post("/destinations", verifyToken, async (req, res) => {
+// Add destination to a specific trip
+app.post("/trips/:tripId/destinations", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { trip_id, name, description, latitude, longitude, image_url, order_index } = req.body;
+    const { tripId } = req.params;
+    const {
+      name,
+      description,
+      latitude,
+      longitude,
+      image_url,
+      order_index,
+    } = req.body;
 
     const result = await client.query(
       `INSERT INTO destinations (trip_id, name, description, latitude, longitude, image_url, order_index)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [trip_id, name, description, latitude, longitude, image_url, order_index]
+      [tripId, name, description, latitude, longitude, image_url, order_index]
     );
 
-    res.json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("Add destination error:", err.message);
+    console.error("Add destination to trip error:", err.message);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
