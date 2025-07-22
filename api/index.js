@@ -209,6 +209,25 @@ app.delete("/destinations/:id", verifyToken, async (req, res) => {
   }
 });
 
+app.get("/trips/:id/destinations", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+
+    const result = await client.query(
+      "SELECT * FROM destinations WHERE trip_id = $1 ORDER BY order_index ASC",
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Get destinations for trip error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 
 // Home route
 app.get("/", (req, res) => {
