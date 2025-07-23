@@ -253,13 +253,13 @@ app.post("/trips/:tripId/photos", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { tripId } = req.params;
-    const { image_url, caption } = req.body;
+    const { image_url, caption, destination_id } = req.body;
 
     const result = await client.query(
-      `INSERT INTO photos (trip_id, image_url, caption)
-       VALUES ($1, $2, $3)
+      `INSERT INTO photos (trip_id, image_url, caption, destination_id)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [tripId, image_url, caption]
+      [tripId, image_url, caption, destination_id || null]
     );
 
     res.status(201).json(result.rows[0]);
