@@ -228,6 +228,66 @@ app.get("/trips/:id/destinations", verifyToken, async (req, res) => {
   }
 });
 
+// === PHOTOS ===
+
+// Get photos for a trip
+app.get("/trips/:tripId/photos", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { tripId } = req.params;
+    const result = await client.query(
+      "SELECT * FROM photos WHERE trip_id = $1 ORDER BY uploaded_at DESC",
+      [tripId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch photos error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Add a photo to a trip
+app.post("/trips/:tripId/photos", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { tripId } = req.params;
+    const { image_url, caption } = req.body;
+
+    const result = await client.query(
+      `INSERT INTO photos (trip_id, image_url, caption)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [tripId, image_url, caption]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Add photo error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Delete a photo
+app.delete("/photos/:id", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+
+    await client.query("DELETE FROM photos WHERE id = $1", [id]);
+
+    res.json({ message: "Photo deleted successfully" });
+  } catch (err) {
+    console.error("Delete photo error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 
 // Home route
 app.get("/", (req, res) => {
