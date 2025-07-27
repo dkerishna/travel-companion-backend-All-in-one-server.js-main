@@ -482,6 +482,151 @@ app.get("/trips/:id/stats", verifyToken, async (req, res) => {
   }
 });
 
+// === USER PROFILES ===
+
+// Get user profile
+app.get("/api/user/profile", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { uid } = req.user;
+
+    const result = await client.query(
+      `SELECT 
+        display_name, 
+        location, 
+        location_lat, 
+        location_lng, 
+        travel_style, 
+        favorite_destinations, 
+        bio, 
+        profile_picture_url,
+        created_at,
+        updated_at
+       FROM user_profiles 
+       WHERE firebase_uid = $1`,
+      [uid]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch user profile error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Create or update user profile
+app.put("/api/user/profile", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { uid } = req.user;
+    const {
+      display_name,
+      location,
+      location_lat,
+      location_lng,
+      travel_style,
+      favorite_destinations,
+      bio,
+      profile_picture_url
+    } = req.body;
+
+    // Check if profile exists
+    const checkResult = await client.query(
+      "SELECT firebase_uid FROM user_profiles WHERE firebase_uid = $1",
+      [uid]
+    );
+
+    if (checkResult.rows.length === 0) {
+      // Insert new profile
+      const insertResult = await client.query(
+        `INSERT INTO user_profiles 
+         (firebase_uid, display_name, location, location_lat, location_lng, 
+          travel_style, favorite_destinations, bio, profile_picture_url, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         RETURNING *`,
+        [uid, display_name, location, location_lat, location_lng,
+          travel_style, favorite_destinations, bio, profile_picture_url]
+      );
+
+      res.status(201).json({
+        message: "Profile created successfully",
+        profile: insertResult.rows[0]
+      });
+    } else {
+      // Update existing profile
+      const updateResult = await client.query(
+        `UPDATE user_profiles 
+         SET display_name = $2, 
+             location = $3, 
+             location_lat = $4, 
+             location_lng = $5,
+             travel_style = $6, 
+             favorite_destinations = $7, 
+             bio = $8, 
+             profile_picture_url = $9,
+             updated_at = NOW()
+         WHERE firebase_uid = $1
+         RETURNING *`,
+        [uid, display_name, location, location_lat, location_lng,
+          travel_style, favorite_destinations, bio, profile_picture_url]
+      );
+
+      res.json({
+        message: "Profile updated successfully",
+        profile: updateResult.rows[0]
+      });
+    }
+  } catch (err) {
+    console.error("Update user profile error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Get user profile stats (optional - for enhanced profile features)
+app.get("/api/user/profile/stats", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { uid } = req.user;
+
+    const result = await client.query(
+      `SELECT 
+        COUNT(DISTINCT t.id) as total_trips,
+        COUNT(DISTINCT CASE WHEN t.trip_rating >= 4 THEN t.id END) as highly_rated_trips,
+        COUNT(DISTINCT d.id) as total_destinations,
+        COUNT(DISTINCT CASE WHEN d.is_completed THEN d.id END) as completed_destinations,
+        COUNT(DISTINCT p.id) as total_photos,
+        COUNT(DISTINCT t.country) as countries_visited
+       FROM trips t
+       LEFT JOIN destinations d ON t.id = d.trip_id
+       LEFT JOIN photos p ON t.id = p.trip_id
+       WHERE t.user_firebase_uid = $1`,
+      [uid]
+    );
+
+    const stats = result.rows[0];
+
+    // Calculate completion rate
+    stats.completion_rate = stats.total_destinations > 0
+      ? Math.round((stats.completed_destinations / stats.total_destinations) * 100)
+      : 0;
+
+    res.json(stats);
+  } catch (err) {
+    console.error("Get user profile stats error:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Home route
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "index.html"));
