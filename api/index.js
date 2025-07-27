@@ -135,6 +135,9 @@ app.get("/trips/:id", verifyToken, async (req, res) => {
 app.put("/trips/:id", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
+    const { uid } = req.user; // Get current user
+    const tripId = req.params.id;
+
     const {
       title,
       country,
@@ -150,6 +153,27 @@ app.put("/trips/:id", verifyToken, async (req, res) => {
       trip_rating
     } = req.body;
 
+    // First check if trip exists and user owns it
+    const checkResult = await client.query(
+      "SELECT user_firebase_uid FROM trips WHERE id = $1",
+      [tripId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: "Trip not found" });
+    }
+
+    if (checkResult.rows[0].user_firebase_uid !== uid) {
+      return res.status(403).json({ error: "Not authorized to edit this trip" });
+    }
+
+    // Clean the data types
+    const cleanBudget = budget !== '' && budget !== null ? parseFloat(budget) : null;
+    const cleanTravelerCount = traveler_count ? parseInt(traveler_count) : 1;
+    const cleanTripRating = trip_rating !== '' && trip_rating !== null ? parseInt(trip_rating) : null;
+    const cleanIsFavorite = Boolean(is_favorite);
+
+    // Update the trip
     await client.query(
       `UPDATE trips SET 
         title = $1, 
@@ -160,18 +184,24 @@ app.put("/trips/:id", verifyToken, async (req, res) => {
         notes = $6, 
         image_url = $7,
         trip_type = COALESCE($8, trip_type),
-        budget = COALESCE($9, budget),
-        traveler_count = COALESCE($10, traveler_count),
-        is_favorite = COALESCE($11, is_favorite),
-        trip_rating = COALESCE($12, trip_rating)
+        budget = $9,
+        traveler_count = $10,
+        is_favorite = $11,
+        trip_rating = $12
        WHERE id = $13`,
-      [title, country, city, start_date, end_date, notes, image_url, trip_type, budget, traveler_count, is_favorite, trip_rating, req.params.id]
+      [title, country, city, start_date, end_date, notes, image_url, trip_type,
+        cleanBudget, cleanTravelerCount, cleanIsFavorite, cleanTripRating, tripId]
     );
 
     res.json({ message: "Trip updated successfully" });
   } catch (err) {
-    console.error("Update trip error:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("Update trip error:", err);
+    // Return the actual error message to help debug
+    res.status(500).json({
+      error: "Database error",
+      details: err.message,
+      code: err.code
+    });
   } finally {
     client.release();
   }
