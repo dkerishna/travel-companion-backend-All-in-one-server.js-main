@@ -485,7 +485,7 @@ app.get("/trips/:id/stats", verifyToken, async (req, res) => {
 // === USER PROFILES ===
 
 // Get user profile
-app.get("/api/user/profile", verifyToken, async (req, res) => {
+app.get("/user/profile", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { uid } = req.user;
@@ -521,7 +521,7 @@ app.get("/api/user/profile", verifyToken, async (req, res) => {
 });
 
 // Create or update user profile
-app.put("/api/user/profile", verifyToken, async (req, res) => {
+app.put("/user/profile", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { uid } = req.user;
@@ -591,7 +591,7 @@ app.put("/api/user/profile", verifyToken, async (req, res) => {
 });
 
 // Get user profile stats (optional - for enhanced profile features)
-app.get("/api/user/profile/stats", verifyToken, async (req, res) => {
+app.get("/user/profile/stats", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { uid } = req.user;
