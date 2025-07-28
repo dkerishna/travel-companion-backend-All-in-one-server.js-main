@@ -309,7 +309,7 @@ app.post("/trips/:tripId/destinations", verifyToken, async (req, res) => {
       `INSERT INTO destinations (
         trip_id, name, description, image_url, order_index,
         destination_type, address, visit_date, visit_time, price_range, priority_level,
-        location_lat, location_lng
+        latitude, longitude
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [tripId, name, description, image_url, order_index, destination_type, address,
@@ -355,8 +355,8 @@ app.put("/destinations/:id", verifyToken, async (req, res) => {
            price_range = COALESCE($9, price_range),
            priority_level = COALESCE($10, priority_level),
            is_completed = COALESCE($11, is_completed),
-           location_lat = COALESCE($12, location_lat),
-           location_lng = COALESCE($13, location_lng)
+           latitude = COALESCE($12, latitude),
+           longitude = COALESCE($13, longitude)
        WHERE id = $14`,
       [name, description, image_url, order_index, destination_type, address,
         visit_date, visit_time, price_range, priority_level, is_completed,
