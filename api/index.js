@@ -301,15 +301,15 @@ app.post("/trips/:tripId/destinations", verifyToken, async (req, res) => {
       visit_time,
       price_range,
       priority_level = 3,
-      location_lat,    // ✅ ADD THIS
-      location_lng     // ✅ ADD THIS
+      location_lat,
+      location_lng
     } = req.body;
 
     const result = await client.query(
       `INSERT INTO destinations (
         trip_id, name, description, image_url, order_index,
         destination_type, address, visit_date, visit_time, price_range, priority_level,
-        location_lat, location_lng    -- ✅ ADD THESE
+        location_lat, location_lng
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [tripId, name, description, image_url, order_index, destination_type, address,
