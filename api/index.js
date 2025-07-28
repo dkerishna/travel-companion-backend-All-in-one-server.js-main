@@ -300,17 +300,20 @@ app.post("/trips/:tripId/destinations", verifyToken, async (req, res) => {
       visit_date,
       visit_time,
       price_range,
-      priority_level = 3
+      priority_level = 3,
+      location_lat,    // ✅ ADD THIS
+      location_lng     // ✅ ADD THIS
     } = req.body;
 
     const result = await client.query(
       `INSERT INTO destinations (
         trip_id, name, description, image_url, order_index,
-        destination_type, address, visit_date, visit_time, price_range, priority_level
+        destination_type, address, visit_date, visit_time, price_range, priority_level,
+        location_lat, location_lng    -- ✅ ADD THESE
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING *`,
-      [tripId, name, description, image_url, order_index, destination_type, address, visit_date, visit_time, price_range, priority_level]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [tripId, name, description, image_url, order_index, destination_type, address,
+        visit_date, visit_time, price_range, priority_level, location_lat, location_lng]
     );
 
     res.status(201).json(result.rows[0]);
@@ -337,7 +340,9 @@ app.put("/destinations/:id", verifyToken, async (req, res) => {
       visit_time,
       price_range,
       priority_level,
-      is_completed
+      is_completed,
+      location_lat,
+      location_lng
     } = req.body;
 
     await client.query(
@@ -349,9 +354,13 @@ app.put("/destinations/:id", verifyToken, async (req, res) => {
            visit_time = COALESCE($8, visit_time),
            price_range = COALESCE($9, price_range),
            priority_level = COALESCE($10, priority_level),
-           is_completed = COALESCE($11, is_completed)
-       WHERE id = $12`,
-      [name, description, image_url, order_index, destination_type, address, visit_date, visit_time, price_range, priority_level, is_completed, req.params.id]
+           is_completed = COALESCE($11, is_completed),
+           location_lat = COALESCE($12, location_lat),
+           location_lng = COALESCE($13, location_lng)
+       WHERE id = $14`,
+      [name, description, image_url, order_index, destination_type, address,
+        visit_date, visit_time, price_range, priority_level, is_completed,
+        location_lat, location_lng, req.params.id]
     );
 
     res.json({ message: "Destination updated successfully" });
